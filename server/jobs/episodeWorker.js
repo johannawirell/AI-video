@@ -1,111 +1,174 @@
 /**
- * Worker for AI episode generation.
- * Handles the background job queue.
- *
- * Author: Johanna Wirell
- * Version: 1.0.0
+ * Worker that generates episodes using AI.
+ * Uses Hugging Face for text generation (instead of OpenAI),
+ * Stability AI for images, and ElevenLabs for audio.
  */
 
 import 'dotenv/config';
 import { Worker } from 'bullmq';
-import IORedis from 'ioredis';
-import OpenAI from 'openai';
 import axios from 'axios';
+import { fileURLToPath } from 'url';
+import path from 'path';
 
-const connection = new IORedis(process.env.REDIS_URL, {
-  maxRetriesPerRequest: null,
-});
+// Fix __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// API keys
+const HF_API_KEY = process.env.HF_API_KEY;
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+
+console.log('Worker started and waiting for jobs...');
 
 const worker = new Worker(
   'episodeQueue',
   async (job) => {
     const { prompt } = job.data;
-    console.log(`🎬 New job received: ${prompt}`);
-    job.updateProgress(10);
+    console.log(`New job received: ${prompt}`);
 
-    try {
-      const scriptResponse = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: 'You are a creative film screenwriter generating short AI film scripts.' },
-          { role: 'user', content: `Create a short 3-scene concept for: ${prompt}` },
-        ],
-      });
-      const script = scriptResponse.choices[0].message.content;
-      job.updateProgress(30);
+    // 1️⃣ Generate script text using Hugging Face
+    const script = await generateScriptFromHuggingFace(prompt);
 
-      const images = await Promise.all([
-        generateImage(`${prompt}, cinematic lighting, scene 1`),
-        generateImage(`${prompt}, cinematic lighting, scene 2`),
-        generateImage(`${prompt}, cinematic lighting, scene 3`),
-      ]);
-      job.updateProgress(60);
+    // 2️⃣ Split into scenes
+    const scenes = script
+      .split(/\n|Scene\s+\d+[:.-]/i)
+      .filter((s) => s.trim().length > 0)
+      .map((desc) => ({
+        description: desc.trim(),
+        image: null,
+        audio: null,
+      }));
 
-      const audios = await Promise.all([
-        generateVoice(`Scene one: ${prompt}`),
-        generateVoice(`Scene two: ${prompt}`),
-        generateVoice(`Scene three: ${prompt}`),
-      ]);
-      job.updateProgress(90);
+    // 3️⃣ Generate image + audio per scene
+    for (let i = 0; i < scenes.length; i++) {
+      const scene = scenes[i];
+      job.updateProgress(Math.round((i / scenes.length) * 100));
 
-      const result = {
-        title: `AI Film: ${prompt}`,
-        script,
-        scenes: images.map((img, i) => ({
-          description: `Scene ${i + 1}`,
-          image: img,
-          audio: audios[i],
-        })),
-      };
+      try {
+        const image = await generateImage(scene.description);
+        scene.image = image;
 
-      job.updateProgress(100);
-      console.log(`Job complete: ${prompt}`);
-      return result;
-    } catch (err) {
-      console.error('Job failed:', err.message);
-      throw err;
+        const audio = await generateVoice(scene.description);
+        scene.audio = audio;
+      } catch (err) {
+        console.error('Error generating scene:', err.message);
+      }
     }
+
+    job.updateProgress(100);
+    return { title: `AI Show: ${prompt}`, scenes };
   },
-  { connection }
+  {
+    connection: {
+      host: '127.0.0.1',
+      port: 6379,
+      maxRetriesPerRequest: null,
+    },
+  }
 );
 
-console.log('Worker started and waiting for jobs...');
-
-// --- Helper functions ---
-async function generateImage(prompt) {
+/**
+ * Generate script using Hugging Face with fallback.
+ */
+async function generateScriptFromHuggingFace(prompt) {
+  console.log('Generating script using Hugging Face...');
   try {
-    const resp = await axios.post(
-      'https://api.stability.ai/v2beta/stable-image/generate/core',
-      { prompt, output_format: 'png' },
-      { headers: { Authorization: `Bearer ${process.env.STABILITY_API_KEY}` } }
+    const response = await fetch(
+      'https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta',
+      {
+        headers: {
+          Authorization: `Bearer ${HF_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+        body: JSON.stringify({
+          inputs: `Write a creative short TV show outline with 3 cinematic scenes about: ${prompt}`,
+          parameters: { max_new_tokens: 400, temperature: 0.8 },
+        }),
+      }
     );
-    return resp.data.image || null;
+
+    if (!response.ok) {
+      console.warn('⚠️ Hugging Face request failed, using fallback text.');
+      return `
+        Scene 1: In a glowing studio, Johanna tests her AI camera.
+        Scene 2: The code hums, and a digital world appears.
+        Scene 3: The AI learns to dream in colors.
+      `;
+    }
+
+    const data = await response.json();
+    const output =
+      data[0]?.generated_text ||
+      'Scene 1: A mysterious AI awakens inside a Swedish developer’s laptop.';
+    console.log('Script generated.');
+    return output;
   } catch (err) {
-    console.error('🖼️ Image generation failed:', err.message);
-    return null;
+    console.error('Error contacting Hugging Face, fallback activated:', err.message);
+    return `
+      Scene 1: In a glowing studio, Johanna tests her AI camera.
+      Scene 2: The code hums, and a digital world appears.
+      Scene 3: The AI learns to dream in colors.
+    `;
   }
 }
 
-async function generateVoice(text) {
+/**
+ * Generate image using Stability AI.
+ */
+async function generateImage(prompt) {
+  console.log('Generating image...');
   try {
-    const voiceId = 'EXAVITQu4vr4xnSDxMaL'; // ElevenLabs default
-    const resp = await axios.post(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+    const response = await axios.post(
+      'https://api.stability.ai/v2beta/stable-image/generate/core',
+      {
+        prompt,
+        output_format: 'png',
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.STABILITY_API_KEY}`,
+          Accept: 'application/json',
+        },
+      }
+    );
+
+    const image = `data:image/png;base64,${response.data.image_base64}`;
+    console.log('Image generated.');
+    return image;
+  } catch (err) {
+    console.warn('⚠️ Image generation failed, using placeholder.');
+    return 'https://placehold.co/600x400?text=AI+Image+Placeholder';
+  }
+}
+
+/**
+ * Generate speech using ElevenLabs.
+ */
+async function generateVoice(text) {
+  console.log('Generating voice...');
+  try {
+    const response = await axios.post(
+      'https://api.elevenlabs.io/v1/text-to-speech/exAVQeAWzVH1dJy1Mu7T',
       { text },
       {
         headers: {
-          'xi-api-key': process.env.ELEVENLABS_API_KEY,
+          'xi-api-key': ELEVENLABS_API_KEY,
           'Content-Type': 'application/json',
         },
         responseType: 'arraybuffer',
       }
     );
-    const base64Audio = Buffer.from(resp.data, 'binary').toString('base64');
-    return `data:audio/mpeg;base64,${base64Audio}`;
+
+    const audioBase64 = Buffer.from(response.data, 'binary').toString('base64');
+    console.log('Voice generated.');
+    return `data:audio/mpeg;base64,${audioBase64}`;
   } catch (err) {
-    console.error('Voice generation failed:', err.message);
+    console.warn('⚠️ Voice generation failed, skipping audio.');
     return null;
   }
 }
+
+worker.on('failed', (job, err) => {
+  console.error(`Job failed: ${err.message}`);
+});
