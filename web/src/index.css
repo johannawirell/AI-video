@@ -3,5 +3,12 @@
 @tailwind utilities;
 
 body {
-  font-family: system-ui, sans-serif;
+  @apply bg-gradient-dark text-textMain font-sans min-h-screen;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-accent/40 rounded-full;
 }
