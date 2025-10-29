@@ -4,33 +4,26 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#0d0d10',
-        surface: '#18181f',
-        accent: '#8b5cf6',
+        background: '#0f0f17', // mörk bakgrund
+        surface: '#1a1a24',    // paneler
+        accent: '#8b5cf6',     // lila
         accentHover: '#a78bfa',
-        textMain: '#f3f4f6',
+        textMain: '#e5e7eb',
         textSubtle: '#9ca3af',
-        border: '#2b2b33',
+        border: '#2a2a35',
+      },
+      backgroundImage: {
+        'gradient-dark': 'linear-gradient(180deg, #0f0f17 0%, #1a1a24 100%)',
+      },
+      animation: {
+        'spin-slow': 'spin 3s linear infinite',
+        fadeIn: 'fadeIn 0.6s ease-in-out',
       },
       keyframes: {
         fadeIn: {
-          '0%': { opacity: 0, transform: 'translateY(4px)' },
-          '100%': { opacity: 1, transform: 'translateY(0)' },
+          from: { opacity: '0' },
+          to: { opacity: '1' },
         },
-        pulsebar: {
-          '0%': { transform: 'translateX(-100%)' },
-          '50%': { transform: 'translateX(0%)' },
-          '100%': { transform: 'translateX(100%)' },
-        },
-        spinSlow: {
-          '0%': { transform: 'rotate(0deg)' },
-          '100%': { transform: 'rotate(360deg)' },
-        },
-      },
-      animation: {
-        fadeIn: 'fadeIn 0.4s ease-out',
-        pulsebar: 'pulsebar 2s ease-in-out infinite',
-        'spin-slow': 'spinSlow 2.5s linear infinite',
       },
     },
   },
