@@ -4,36 +4,33 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#0b0b0e',
-        surface: '#15151a',
+        background: '#0d0d10',
+        surface: '#18181f',
         accent: '#8b5cf6',
-        accentHover: '#9b7cff',
+        accentHover: '#a78bfa',
         textMain: '#f3f4f6',
         textSubtle: '#9ca3af',
         border: '#2b2b33',
       },
-      fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-      },
-      boxShadow: {
-        glow: '0 0 25px rgba(123, 92, 255, 0.25)',
-      },
-      backgroundImage: {
-        'gradient-dark': 'linear-gradient(145deg, #0b0b0e, #15151a)',
-      },
       keyframes: {
-        glowPulse: {
-          '0%, 100%': { boxShadow: '0 0 15px rgba(123, 92, 255, 0.3)' },
-          '50%': { boxShadow: '0 0 30px rgba(123, 92, 255, 0.6)' },
-        },
         fadeIn: {
-          '0%': { opacity: '0', transform: 'translateY(8px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
+          '0%': { opacity: 0, transform: 'translateY(4px)' },
+          '100%': { opacity: 1, transform: 'translateY(0)' },
+        },
+        pulsebar: {
+          '0%': { transform: 'translateX(-100%)' },
+          '50%': { transform: 'translateX(0%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+        spinSlow: {
+          '0%': { transform: 'rotate(0deg)' },
+          '100%': { transform: 'rotate(360deg)' },
         },
       },
       animation: {
-        glowPulse: 'glowPulse 2s ease-in-out infinite',
-        fadeIn: 'fadeIn 0.6s ease forwards',
+        fadeIn: 'fadeIn 0.4s ease-out',
+        pulsebar: 'pulsebar 2s ease-in-out infinite',
+        'spin-slow': 'spinSlow 2.5s linear infinite',
       },
     },
   },
