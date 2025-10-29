@@ -6,11 +6,11 @@
  */
 import express from 'express';
 import { EpisodeController } from '../controllers/episode-controller.js';
+
 export const router = express.Router();
+const controller = new EpisodeController();
 
-const episodeController = new EpisodeController();
-
-router.get('/', episodeController.index.bind(episodeController));
-router.post('/generate-episode', episodeController.generateEpisode.bind(episodeController));
-router.get('/job/:id', episodeController.getJob.bind(episodeController));
+router.get('/', controller.index.bind(controller));
+router.post('/generate-episode', controller.generateEpisode.bind(controller));
+router.get('/job/:id', controller.getJob.bind(controller));
 

@@ -1,61 +1,111 @@
-import { Worker } from 'bullmq';
-import axios from 'axios';
-import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+/**
+ * Worker for AI episode generation.
+ * Handles the background job queue.
+ *
+ * Author: Johanna Wirell
+ * Version: 1.0.0
+ */
+
 import 'dotenv/config';
-import { createClient } from 'redis';
+import { Worker } from 'bullmq';
+import IORedis from 'ioredis';
+import OpenAI from 'openai';
+import axios from 'axios';
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
-const redisConnection = createClient({ url: REDIS_URL });
-await redisConnection.connect();
+const connection = new IORedis(process.env.REDIS_URL, {
+  maxRetriesPerRequest: null,
+});
 
-const worker = new Worker('episodeQueue', async job => {
-  const { prompt } = job.data;
-  console.log(`🎬 Starting episode job for: "${prompt}"`);
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  job.updateProgress(10);
+const worker = new Worker(
+  'episodeQueue',
+  async (job) => {
+    const { prompt } = job.data;
+    console.log(`🎬 New job received: ${prompt}`);
+    job.updateProgress(10);
 
-  // 1) Generera manus
-  const scriptResp = await axios.post(
-    'https://api.openai.com/v1/chat/completions',
-    {
-      model: 'gpt-5-mini',
-      messages: [
-        { role: 'system', content: 'Write a 3-scene TV episode. Return JSON: { title, scenes: [{ description, dialogue: [{character,text}] }] }' },
-        { role: 'user', content: prompt }
-      ]
-    },
-    { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } }
-  );
+    try {
+      const scriptResponse = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a creative film screenwriter generating short AI film scripts.' },
+          { role: 'user', content: `Create a short 3-scene concept for: ${prompt}` },
+        ],
+      });
+      const script = scriptResponse.choices[0].message.content;
+      job.updateProgress(30);
 
-  const script = JSON.parse(scriptResp.data.choices[0].message.content);
-  job.updateProgress(25);
+      const images = await Promise.all([
+        generateImage(`${prompt}, cinematic lighting, scene 1`),
+        generateImage(`${prompt}, cinematic lighting, scene 2`),
+        generateImage(`${prompt}, cinematic lighting, scene 3`),
+      ]);
+      job.updateProgress(60);
 
-  // 2) Generera bilder + ljud
-  const results = await Promise.all(script.scenes.map(async scene => {
-    const imgResp = await axios.post(
-      'https://api.openai.com/v1/images/generations',
-      { model: 'gpt-image-1', prompt: scene.description },
-      { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } }
+      const audios = await Promise.all([
+        generateVoice(`Scene one: ${prompt}`),
+        generateVoice(`Scene two: ${prompt}`),
+        generateVoice(`Scene three: ${prompt}`),
+      ]);
+      job.updateProgress(90);
+
+      const result = {
+        title: `AI Film: ${prompt}`,
+        script,
+        scenes: images.map((img, i) => ({
+          description: `Scene ${i + 1}`,
+          image: img,
+          audio: audios[i],
+        })),
+      };
+
+      job.updateProgress(100);
+      console.log(`Job complete: ${prompt}`);
+      return result;
+    } catch (err) {
+      console.error('Job failed:', err.message);
+      throw err;
+    }
+  },
+  { connection }
+);
+
+console.log('Worker started and waiting for jobs...');
+
+// --- Helper functions ---
+async function generateImage(prompt) {
+  try {
+    const resp = await axios.post(
+      'https://api.stability.ai/v2beta/stable-image/generate/core',
+      { prompt, output_format: 'png' },
+      { headers: { Authorization: `Bearer ${process.env.STABILITY_API_KEY}` } }
     );
-    const imgUrl = imgResp.data.data[0].url;
+    return resp.data.image || null;
+  } catch (err) {
+    console.error('🖼️ Image generation failed:', err.message);
+    return null;
+  }
+}
 
-    const dialogueText = scene.dialogue.map(d => `${d.character}: ${d.text}`).join('\n');
-    const ttsResp = await axios.post(
-      'https://api.elevenlabs.io/v1/text-to-speech/default',
-      { text: dialogueText },
-      { headers: { Authorization: `Bearer ${process.env.VOICE_API_KEY}`, 'Content-Type': 'application/json' }, responseType: 'arraybuffer' }
+async function generateVoice(text) {
+  try {
+    const voiceId = 'EXAVITQu4vr4xnSDxMaL'; // ElevenLabs default
+    const resp = await axios.post(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+      { text },
+      {
+        headers: {
+          'xi-api-key': process.env.ELEVENLABS_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        responseType: 'arraybuffer',
+      }
     );
-
-    const fileName = `${uuidv4()}.mp3`;
-    const outPath = path.join('public', fileName);
-    fs.writeFileSync(outPath, Buffer.from(ttsResp.data, 'binary'));
-
-    return { description: scene.description, image: imgUrl, audio: `/public/${fileName}` };
-  }));
-
-  job.updateProgress(100);
-  console.log('✅ Episode complete!');
-  return { title: script.title, scenes: results };
-}, { connection: redisConnection });
+    const base64Audio = Buffer.from(resp.data, 'binary').toString('base64');
+    return `data:audio/mpeg;base64,${base64Audio}`;
+  } catch (err) {
+    console.error('Voice generation failed:', err.message);
+    return null;
+  }
+}
