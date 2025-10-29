@@ -6,7 +6,7 @@ export default {
       colors: {
         background: '#0b0b0e',
         surface: '#15151a',
-        accent: '#7b5cff',
+        accent: '#8b5cf6',
         accentHover: '#9b7cff',
         textMain: '#f3f4f6',
         textSubtle: '#9ca3af',

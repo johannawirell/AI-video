@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-unused-vars
 import EpisodeForm from './components/EpisodeForm';
 
 export default function App() {
@@ -15,7 +16,7 @@ export default function App() {
       </div>
 
       <footer className="mt-10 text-textSubtle text-sm">
-        © {new Date().getFullYear()} Johanna Wirell · Crafted with <span className="text-accent">♥</span>
+         © {new Date().getFullYear()} Johanna Wirell • All rights reserved
       </footer>
     </div>
   );

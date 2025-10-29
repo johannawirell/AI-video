@@ -7,8 +7,7 @@ export default function EpisodeForm() {
   const [, setJobId] = useState(null);
   const [result, setResult] = useState(null);
 
-  // ⚙️ ändra till din backend-url vid deploy (Render t.ex.)
-  const API_BASE = 'http://localhost:4000/api';
+  const API_BASE = import.meta.env.VITE_SERVER_URL || 'http://localhost:4000/api';
 
   const startJob = async () => {
     setResult(null);
@@ -17,20 +16,20 @@ export default function EpisodeForm() {
       const resp = await axios.post(`${API_BASE}/generate-episode`, { prompt });
       setJobId(resp.data.jobId);
       setStatus('Jobb startat — AI jobbar...');
-      pollJob(resp.data.jobId);
+      pullJob(resp.data.jobId);
     } catch (err) {
       setStatus(`Fel: ${err.message}`);
     }
   };
 
-  const pollJob = async (id) => {
+  const pullJob = async (id) => {
     const interval = setInterval(async () => {
       try {
         const resp = await axios.get(`${API_BASE}/job/${id}`);
         setStatus(`Status: ${resp.data.state} (${resp.data.progress || 0}%)`);
         if (resp.data.state === 'completed') {
           clearInterval(interval);
-          setStatus('✅ Färdig!');
+          setStatus('Färdig!');
           setResult(resp.data.result);
         }
       } catch (err) {
@@ -41,47 +40,94 @@ export default function EpisodeForm() {
   };
 
   return (
-    <div className="bg-white shadow rounded-lg p-6">
-      <textarea
-        value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
-        placeholder="Skriv din idé till en TV-serie..."
-        className="w-full border border-gray-300 rounded-md p-3 mb-4 focus:ring-2 focus:ring-blue-400"
-        rows="4"
-      />
-      <button
-        onClick={startJob}
-        disabled={!prompt}
-        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md disabled:bg-gray-300"
-      >
-        🎥 Generera avsnitt
-      </button>
+  <div className="">
+    
 
-      <p className="mt-4 text-gray-700">{status}</p>
+    <textarea
+      value={prompt}
+      onChange={(e) => setPrompt(e.target.value)}
+      placeholder="Beskriv din serieidé..."
+      className="w-full 
+                bg-surface/80 
+                text-textMain 
+                placeholder-textSubtle 
+                border 
+                border-border 
+                rounded-xl p-4 
+                mb-6 
+                focus:outline-none 
+                focus:ring-2 
+                focus:ring-accent 
+                focus:border-transparent 
+                transition-all 
+                resize-none"
+      rows="4"
+    />
 
-      {result && (
-        <div className="mt-8">
-          <h2 className="text-2xl font-bold mb-4">{result.title}</h2>
-          {result.scenes.map((scene, i) => (
-            <div key={i} className="border border-gray-200 p-4 rounded-lg mb-6">
-              <p className="italic text-gray-700 mb-2">{scene.description}</p>
-              {scene.image && (
-                <img
-                  src={scene.image}
-                  alt={`Scene ${i + 1}`}
-                  className="w-full rounded-md mb-3"
-                />
-              )}
-              {scene.audio && (
-                <audio controls className="w-full">
-                  <source src={scene.audio} type="audio/mpeg" />
-                  Din webbläsare stödjer inte ljuduppspelning.
-                </audio>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+    <button
+      onClick={startJob}
+      disabled={!prompt}
+      className=" w-full 
+                  bg-accent 
+                  text-white 
+                  font-semibold 
+                  py-3 
+                  px-6 
+                  rounded-full 
+                  cursor-pointer 
+                  hover:bg-accentHover 
+                  hover:text-white/90 
+                  hover:scale-[1.02] 
+                  transition-all 
+                  duration-300 
+                  shadow-md 
+                  hover:shadow-accent/40 
+                  active:scale-95 
+                  disabled:opacity-50 
+                  disabled:cursor-not-allowed
+                  "
+    >Generera avsnitt</button>
+
+    <p className="mt-4 
+                  text-textSubtle 
+                  text-center"
+    >{status}</p>
+
+    {result && (
+      <div className="mt-10 space-y-8">
+        <h3 className="text-xl font-bold text-accent text-center">{result.title}</h3>
+
+        {result.scenes.map((scene, i) => (
+          <div
+            key={i}
+            className="bg-surface/60 
+                       border 
+                       border-border 
+                       rounded-xl 
+                       p-5 
+                       transition 
+                       hover:border-accent/30"
+          >
+            <p className="italic text-textSubtle mb-3">{scene.description}</p>
+
+            {scene.image && (
+              <img
+                src={scene.image}
+                alt={`Scen ${i + 1}`}
+                className="w-full rounded-lg mb-3"
+              />
+            )}
+
+            {scene.audio && (
+              <audio controls className="w-full">
+                <source src={scene.audio} type="audio/mpeg" />
+              </audio>
+            )}
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
 }
